@@ -67,7 +67,11 @@ function ExportHeatmap(): JSX.Element {
                         src={screenshotUrl ?? ''}
                         alt="Heatmap"
                         // eslint-disable-next-line react/forbid-dom-props
-                        style={{ width: '100%', height: 'auto', display: 'block' }}
+                        style={{
+                            width: '100%',
+                            height: 'auto',
+                            display: 'block',
+                        }}
                     />
                 )
             ) : (
@@ -120,9 +124,10 @@ export function Exporter(props: ExportedData): JSX.Element {
     useEffect(() => {
         // NOTE: For embedded views we emit an event to indicate the content width / height to allow the parent to correctly resize
         // NOTE: We post the window name to allow the parent to identify the iframe
-        // it's ok to use we use a wildcard for the origin bc data isn't sensitive
-        // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
-        window.parent?.postMessage({ event: 'posthog:dimensions', name: window.name, height, width }, '*')
+        window.parent?.postMessage(
+            { event: 'posthog:dimensions', name: window.name, height, width },
+            window.location.ancestorOrigins?.[0] || '*'
+        )
     }, [height, width])
 
     useEffect(() => {

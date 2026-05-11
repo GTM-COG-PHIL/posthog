@@ -53,13 +53,19 @@ export const iframedToolbarBrowserLogic = kea<iframedToolbarBrowserLogicType>([
 
     connect(() => ({
         values: [
-            authorizedUrlListLogic({ ...defaultAuthorizedUrlProperties, type: AuthorizedUrlListType.TOOLBAR_URLS }),
+            authorizedUrlListLogic({
+                ...defaultAuthorizedUrlProperties,
+                type: AuthorizedUrlListType.TOOLBAR_URLS,
+            }),
             ['urlsKeyed', 'checkUrlIsAuthorized'],
             teamLogic,
             ['currentTeam'],
         ],
         actions: [
-            authorizedUrlListLogic({ ...defaultAuthorizedUrlProperties, type: AuthorizedUrlListType.TOOLBAR_URLS }),
+            authorizedUrlListLogic({
+                ...defaultAuthorizedUrlProperties,
+                type: AuthorizedUrlListType.TOOLBAR_URLS,
+            }),
             ['addUrl'],
             teamLogic,
             ['updateCurrentTeamSuccess'],
@@ -104,7 +110,10 @@ export const iframedToolbarBrowserLogic = kea<iframedToolbarBrowserLogicType>([
         heatmapFilters: [
             DEFAULT_HEATMAP_FILTERS,
             {
-                patchHeatmapFilters: (state, { filters }) => ({ ...state, ...filters }),
+                patchHeatmapFilters: (state, { filters }) => ({
+                    ...state,
+                    ...filters,
+                }),
             },
         ],
         heatmapFixedPositionMode: [
@@ -204,14 +213,18 @@ export const iframedToolbarBrowserLogic = kea<iframedToolbarBrowserLogicType>([
 
     listeners(({ actions, props, values, cache }) => ({
         sendToolbarMessage: ({ type, payload }) => {
-            // it's ok to use we use a wildcard for the origin bc data isn't sensitive
-            // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
+            let origin = '*'
+            try {
+                origin = values.browserUrl ? new URL(values.browserUrl).origin : '*'
+            } catch {
+                // invalid URL, fall back to wildcard
+            }
             props.iframeRef?.current?.contentWindow?.postMessage(
                 {
                     type,
                     payload,
                 },
-                '*'
+                origin
             )
         },
         setProposedBrowserUrl: ({ url }) => {
@@ -317,7 +330,10 @@ export const iframedToolbarBrowserLogic = kea<iframedToolbarBrowserLogicType>([
 
             cache.disposables.add(() => {
                 const warnTimerId = setTimeout(() => {
-                    actions.setIframeBanner({ level: 'warning', message: 'Still waiting for the toolbar to load.' })
+                    actions.setIframeBanner({
+                        level: 'warning',
+                        message: 'Still waiting for the toolbar to load.',
+                    })
                 }, 3000)
                 return () => clearTimeout(warnTimerId)
             }, 'warnTimeout')

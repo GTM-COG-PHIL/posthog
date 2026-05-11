@@ -104,7 +104,9 @@ export const heatmapsBrowserLogic = kea<heatmapsBrowserLogicType>([
         setIframeBanner: (banner: IFrameBanner | null) => ({ banner }),
         startTrackingLoading: true,
         stopTrackingLoading: true,
-        setReplayIframeData: (replayIframeData: ReplayIframeData | null) => ({ replayIframeData }),
+        setReplayIframeData: (replayIframeData: ReplayIframeData | null) => ({
+            replayIframeData,
+        }),
         setReplayIframeDataURL: (url: string | null) => ({ url }),
     }),
 
@@ -126,7 +128,10 @@ export const heatmapsBrowserLogic = kea<heatmapsBrowserLogicType>([
                         ORDER BY timestamp DESC
                         LIMIT 100`
 
-                    const res = await api.queryHogQL(query, { scene: 'Heatmaps', productKey: 'heatmaps' })
+                    const res = await api.queryHogQL(query, {
+                        scene: 'Heatmaps',
+                        productKey: 'heatmaps',
+                    })
 
                     return res.results?.map((x) => x[0]) as string[]
                 },
@@ -147,9 +152,15 @@ export const heatmapsBrowserLogic = kea<heatmapsBrowserLogicType>([
                         ORDER BY count DESC
                         LIMIT 10`
 
-                    const res = await api.queryHogQL(query, { scene: 'Heatmaps', productKey: 'heatmaps' })
+                    const res = await api.queryHogQL(query, {
+                        scene: 'Heatmaps',
+                        productKey: 'heatmaps',
+                    })
 
-                    return res.results?.map((x) => ({ url: x[0], count: x[1] })) as { url: string; count: number }[]
+                    return res.results?.map((x) => ({
+                        url: x[0],
+                        count: x[1],
+                    })) as { url: string; count: number }[]
                 },
             },
         ],
@@ -297,14 +308,18 @@ export const heatmapsBrowserLogic = kea<heatmapsBrowserLogicType>([
         },
 
         sendToolbarMessage: ({ type, payload }) => {
-            // it's ok to use we use a wildcard for the origin bc data isn't sensitive
-            // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
+            let origin = '*'
+            try {
+                origin = values.dataUrl ? new URL(values.dataUrl).origin : '*'
+            } catch {
+                // invalid URL, fall back to wildcard
+            }
             props.iframeRef?.current?.contentWindow?.postMessage(
                 {
                     type,
                     payload,
                 },
-                '*'
+                origin
             )
         },
 
@@ -436,33 +451,51 @@ export const heatmapsBrowserLogic = kea<heatmapsBrowserLogicType>([
 
     actionToUrl(({ values }) => ({
         setDisplayUrl: ({ url }) => {
-            const searchParams = { ...router.values.searchParams, pageURL: url }
+            const searchParams = {
+                ...router.values.searchParams,
+                pageURL: url,
+            }
             if (!url || url.trim() === '') {
                 delete searchParams.pageURL
             }
             return [router.values.location.pathname, searchParams, router.values.hashParams, { replace: true }]
         },
         setDataUrl: ({ url }) => {
-            const searchParams = { ...router.values.searchParams, dataUrl: url }
+            const searchParams = {
+                ...router.values.searchParams,
+                dataUrl: url,
+            }
             if (!url || url.trim() === '') {
                 delete searchParams.dataUrl
             }
             return [router.values.location.pathname, searchParams, router.values.hashParams, { replace: true }]
         },
         patchHeatmapFilters: () => {
-            const searchParams = { ...router.values.searchParams, heatmapFilters: values.heatmapFilters }
+            const searchParams = {
+                ...router.values.searchParams,
+                heatmapFilters: values.heatmapFilters,
+            }
             return [router.values.location.pathname, searchParams, router.values.hashParams, { replace: true }]
         },
         setHeatmapColorPalette: ({ palette }) => {
-            const searchParams = { ...router.values.searchParams, heatmapPalette: palette }
+            const searchParams = {
+                ...router.values.searchParams,
+                heatmapPalette: palette,
+            }
             return [router.values.location.pathname, searchParams, router.values.hashParams, { replace: true }]
         },
         setHeatmapFixedPositionMode: ({ mode }) => {
-            const searchParams = { ...router.values.searchParams, heatmapFixedPositionMode: mode }
+            const searchParams = {
+                ...router.values.searchParams,
+                heatmapFixedPositionMode: mode,
+            }
             return [router.values.location.pathname, searchParams, router.values.hashParams, { replace: true }]
         },
         setCommonFilters: ({ filters }) => {
-            const searchParams = { ...router.values.searchParams, commonFilters: filters }
+            const searchParams = {
+                ...router.values.searchParams,
+                commonFilters: filters,
+            }
             return [router.values.location.pathname, searchParams, router.values.hashParams, { replace: true }]
         },
     })),
