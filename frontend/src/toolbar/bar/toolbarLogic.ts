@@ -60,7 +60,7 @@ export const toolbarLogic = kea<toolbarLogicType>([
     connect(() => ({
         values: [
             toolbarConfigLogic,
-            ['posthog'],
+            ['posthog', 'uiHost'],
             heatmapToolbarMenuLogic,
             ['elementStatsLoading', 'rawHeatmapLoading', 'isRefreshing'],
             actionsLogic,
@@ -110,7 +110,9 @@ export const toolbarLogic = kea<toolbarLogicType>([
     actions(() => ({
         toggleTheme: (theme?: 'light' | 'dark') => ({ theme }),
         toggleMinimized: (minimized?: boolean) => ({ minimized }),
-        setHedgehogModeEnabled: (hedgehogModeEnabled: boolean) => ({ hedgehogModeEnabled }),
+        setHedgehogModeEnabled: (hedgehogModeEnabled: boolean) => ({
+            hedgehogModeEnabled,
+        }),
         setDragPosition: (x: number, y: number) => ({ x, y }),
         syncWithHedgehog: true,
         openHedgehogOptions: true,
@@ -455,9 +457,14 @@ export const toolbarLogic = kea<toolbarLogicType>([
         setVisibleMenu: ({ visibleMenu }, _, __, previousState) => {
             const previousMenu = toolbarLogic.selectors.visibleMenu(previousState)
             if (visibleMenu !== 'none') {
-                toolbarPosthogJS.capture('toolbar menu opened', { menu: visibleMenu, previous_menu: previousMenu })
+                toolbarPosthogJS.capture('toolbar menu opened', {
+                    menu: visibleMenu,
+                    previous_menu: previousMenu,
+                })
             } else if (previousMenu !== 'none') {
-                toolbarPosthogJS.capture('toolbar menu closed', { menu: previousMenu })
+                toolbarPosthogJS.capture('toolbar menu closed', {
+                    menu: previousMenu,
+                })
             }
 
             actions.disableInspect()
@@ -538,7 +545,9 @@ export const toolbarLogic = kea<toolbarLogicType>([
                     values.element?.removeEventListener('touchmove', onMove)
                     values.element?.removeEventListener('touchend', onTouchEnd)
                 }
-                values.element.addEventListener('touchmove', onMove, { passive: true })
+                values.element.addEventListener('touchmove', onMove, {
+                    passive: true,
+                })
                 values.element.addEventListener('touchend', onTouchEnd)
             } else {
                 const onMouseUp = (e: MouseEvent): void => {
@@ -584,20 +593,24 @@ export const toolbarLogic = kea<toolbarLogicType>([
             actions.setVisibleMenu('actions')
         },
         actionCreatedSuccess: (action) => {
-            // if embedded, we need to tell the parent window that a new action was created
-            // it's ok to use we use a wildcard for the origin bc data isn't sensitive
-            // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
-            window.parent.postMessage({ type: PostHogAppToolbarEvent.PH_NEW_ACTION_CREATED, payload: action }, '*')
+            window.parent.postMessage(
+                {
+                    type: PostHogAppToolbarEvent.PH_NEW_ACTION_CREATED,
+                    payload: action,
+                },
+                values.uiHost || '*'
+            )
         },
         maybeSendNavigationMessage: () => {
             const currentPath = window.location.pathname
             if (currentPath !== values.currentPathname) {
                 actions.setCurrentPathname(currentPath)
-                // it's ok to use we use a wildcard for the origin bc data isn't sensitive
-                // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
                 window.parent.postMessage(
-                    { type: PostHogAppToolbarEvent.PH_TOOLBAR_NAVIGATED, payload: { path: currentPath } },
-                    '*'
+                    {
+                        type: PostHogAppToolbarEvent.PH_TOOLBAR_NAVIGATED,
+                        payload: { path: currentPath },
+                    },
+                    values.uiHost || '*'
                 )
             }
         },
@@ -730,9 +743,12 @@ export const toolbarLogic = kea<toolbarLogicType>([
                             actions.setHeatmapFixedPositionMode(e.data.payload.fixedPositionMode)
                             actions.setCommonFilters(e.data.payload.commonFilters)
                             actions.toggleClickmapsEnabled(false)
-                            // it's ok to use we use a wildcard for the origin bc data isn't sensitive
-                            // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
-                            window.parent.postMessage({ type: PostHogAppToolbarEvent.PH_TOOLBAR_READY }, '*')
+                            window.parent.postMessage(
+                                {
+                                    type: PostHogAppToolbarEvent.PH_TOOLBAR_READY,
+                                },
+                                values.uiHost || '*'
+                            )
                             return
                         case PostHogAppToolbarEvent.PH_ELEMENT_SELECTOR:
                             if (e.data.payload.enabled) {
@@ -756,9 +772,7 @@ export const toolbarLogic = kea<toolbarLogicType>([
             // Post message up to parent in case we are embedded in an app
             // Tell the parent window that we are ready
             // we check if we're in an iframe before this setup to avoid logging warnings to the console
-            // it's ok to use we use a wildcard for the origin bc data isn't sensitive
-            // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
-            window.parent.postMessage({ type: PostHogAppToolbarEvent.PH_TOOLBAR_INIT }, '*')
+            window.parent.postMessage({ type: PostHogAppToolbarEvent.PH_TOOLBAR_INIT }, values.uiHost || '*')
         }
     }),
 ])
