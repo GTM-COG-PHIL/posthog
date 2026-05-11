@@ -5,21 +5,34 @@ import * as crypto from 'crypto'
 
 const ENCODING_KEY = 'encoding'
 const ENCRYPTED_ENCODING = 'binary/encrypted'
+
+// Legacy Fernet format constants (kept for backward-compatible decryption)
 const FERNET_VERSION = 0x80
 const FERNET_HEADER_SIZE = 1 + 8 + 16 // version + timestamp + IV
 const HMAC_SIZE = 32
 
+// AES-256-GCM format constants
+const GCM_VERSION = 0x81
+const GCM_IV_SIZE = 12
+const GCM_AUTH_TAG_SIZE = 16
+const GCM_HEADER_SIZE = 1 + 8 + GCM_IV_SIZE // version + timestamp + IV
+
 /**
- * Fernet-compatible encryption codec that matches PostHog's Python EncryptionCodec.
+ * Authenticated encryption codec for Temporal payload encryption.
  *
- * The Python side (posthog/temporal/common/codec.py) derives a Fernet key from
- * Django's SECRET_KEY: zero-pad to 32 bytes, base64url-encode. The first 16 bytes
- * of the decoded key are the HMAC-SHA256 signing key, the last 16 bytes are the
- * AES-128-CBC encryption key.
+ * Encrypts with AES-256-GCM (version 0x81) and decrypts both GCM tokens and
+ * legacy Fernet tokens (version 0x80, AES-128-CBC + HMAC-SHA256) for backward
+ * compatibility with the Python EncryptionCodec (posthog/temporal/common/codec.py).
+ *
+ * Key derivation matches the Python side: the Django SECRET_KEY is zero-padded
+ * (left) or truncated to 32 bytes.
  */
 export class EncryptionCodec implements PayloadCodec {
+    // Legacy Fernet keys (for backward-compatible decryption)
     private signingKey: Buffer
     private encryptionKey: Buffer
+    // AES-256-GCM key (full 32 bytes)
+    private gcmKey: Buffer
 
     constructor(secretKey: string) {
         // Match Python: pad with null bytes on the left, truncate to 32 bytes
@@ -33,6 +46,7 @@ export class EncryptionCodec implements PayloadCodec {
 
         this.signingKey = padded.subarray(0, 16)
         this.encryptionKey = padded.subarray(16, 32)
+        this.gcmKey = Buffer.from(padded)
     }
 
     // eslint-disable-next-line @typescript-eslint/require-await
@@ -56,30 +70,48 @@ export class EncryptionCodec implements PayloadCodec {
     }
 
     private encrypt(data: Uint8Array): Uint8Array {
-        const iv = crypto.randomBytes(16)
+        const iv = crypto.randomBytes(GCM_IV_SIZE)
         const timestamp = BigInt(Math.floor(Date.now() / 1000))
 
-        const cipher = crypto.createCipheriv('aes-128-cbc', this.encryptionKey, iv)
+        const cipher = crypto.createCipheriv('aes-256-gcm', this.gcmKey, iv)
         const ciphertext = Buffer.concat([cipher.update(data), cipher.final()])
+        const authTag = cipher.getAuthTag()
 
-        // Fernet token: version || timestamp (big-endian 64-bit) || IV || ciphertext
-        const body = Buffer.alloc(FERNET_HEADER_SIZE + ciphertext.length)
-        body[0] = FERNET_VERSION
-        body.writeBigUInt64BE(timestamp, 1)
-        iv.copy(body, 9)
-        ciphertext.copy(body, FERNET_HEADER_SIZE)
+        // GCM token: version(1) || timestamp(8) || IV(12) || authTag(16) || ciphertext
+        const token = Buffer.alloc(GCM_HEADER_SIZE + GCM_AUTH_TAG_SIZE + ciphertext.length)
+        token[0] = GCM_VERSION
+        token.writeBigUInt64BE(timestamp, 1)
+        iv.copy(token, 9)
+        authTag.copy(token, GCM_HEADER_SIZE)
+        ciphertext.copy(token, GCM_HEADER_SIZE + GCM_AUTH_TAG_SIZE)
 
-        const hmac = crypto.createHmac('sha256', this.signingKey).update(body).digest()
-        const raw = Buffer.concat([body, hmac])
-
-        // Python's Fernet expects base64url with padding — use standard base64
-        // (which includes padding) and swap to URL-safe alphabet
-        return Buffer.from(raw.toString('base64').replace(/\+/g, '-').replace(/\//g, '_'))
+        return Buffer.from(token.toString('base64url'))
     }
 
     private decrypt(token: Uint8Array): Uint8Array {
-        // Python's Fernet stores tokens as base64url-encoded bytes
         const buf = Buffer.from(Buffer.from(token).toString(), 'base64url')
+
+        if (buf[0] === GCM_VERSION) {
+            return this.decryptGcm(buf)
+        }
+        return this.decryptFernet(buf)
+    }
+
+    private decryptGcm(buf: Buffer): Uint8Array {
+        if (buf.length < GCM_HEADER_SIZE + GCM_AUTH_TAG_SIZE) {
+            throw new Error('GCM token too short')
+        }
+
+        const iv = buf.subarray(9, 9 + GCM_IV_SIZE)
+        const authTag = buf.subarray(GCM_HEADER_SIZE, GCM_HEADER_SIZE + GCM_AUTH_TAG_SIZE)
+        const ciphertext = buf.subarray(GCM_HEADER_SIZE + GCM_AUTH_TAG_SIZE)
+
+        const decipher = crypto.createDecipheriv('aes-256-gcm', this.gcmKey, iv)
+        decipher.setAuthTag(authTag)
+        return Buffer.concat([decipher.update(ciphertext), decipher.final()])
+    }
+
+    private decryptFernet(buf: Buffer): Uint8Array {
         if (buf.length < FERNET_HEADER_SIZE + HMAC_SIZE) {
             throw new Error('Fernet token too short')
         }
