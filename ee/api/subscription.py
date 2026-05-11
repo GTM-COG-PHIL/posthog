@@ -4,9 +4,7 @@ from typing import Any, Optional
 
 from django.conf import settings
 from django.db.models import QuerySet
-from django.http import HttpRequest, JsonResponse
 
-import jwt
 import posthoganalytics
 from drf_spectacular.utils import (
     OpenApiParameter,
@@ -30,7 +28,7 @@ from posthog.event_usage import groups
 from posthog.exceptions_capture import capture_exception
 from posthog.models import Insight
 from posthog.models.integration import Integration
-from posthog.models.subscription import Subscription, SubscriptionDelivery, unsubscribe_using_token
+from posthog.models.subscription import Subscription, SubscriptionDelivery
 from posthog.permissions import PremiumFeaturePermission
 from posthog.rate_limit import SubscriptionTestDeliveryThrottle
 from posthog.security.url_validation import is_url_allowed
@@ -677,16 +675,3 @@ class SubscriptionDeliveryViewSet(TeamAndOrgViewSetMixin, viewsets.ReadOnlyModel
                     )
                 queryset = queryset.filter(status=status_param)
         return queryset
-
-
-def unsubscribe(request: HttpRequest):
-    token = request.GET.get("token")
-    if not token:
-        return JsonResponse({"success": False})
-
-    try:
-        unsubscribe_using_token(token)
-    except jwt.DecodeError:
-        return JsonResponse({"success": False})
-
-    return JsonResponse({"success": True})

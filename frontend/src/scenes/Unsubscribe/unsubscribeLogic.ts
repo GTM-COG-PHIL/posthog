@@ -1,6 +1,5 @@
 import { actions, afterMount, kea, path } from 'kea'
 import { loaders } from 'kea-loaders'
-import { router } from 'kea-router'
 
 import api from 'lib/api'
 
@@ -14,15 +13,19 @@ export const unsubscribeLogic = kea<unsubscribeLogicType>([
 
     loaders(() => ({
         unsubscription: {
-            __default: false as boolean,
+            __default: null as boolean | null,
             attemptUnsubscribe: async ({ token }) => {
-                const res = await api.get(`api/unsubscribe?token=${token}`)
+                const res = await api.create(`api/unsubscribe`, { token })
                 return res.success
             },
         },
     })),
     afterMount(({ actions }) => {
-        const { token } = router.values.searchParams
-        actions.attemptUnsubscribe(token)
+        const hash = window.location.hash
+        const params = new URLSearchParams(hash.slice(1))
+        const token = params.get('token')
+        if (token) {
+            actions.attemptUnsubscribe(token)
+        }
     }),
 ])

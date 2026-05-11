@@ -17,15 +17,20 @@ export function Unsubscribe(): JSX.Element {
         <BridgePage view="unsubscribe">
             {unsubscriptionLoading ? (
                 <SpinnerOverlay sceneLevel />
-            ) : unsubscription ? (
+            ) : unsubscription === true ? (
                 <div>
                     <h2>You have been unsubscribed!</h2>
                     <p>You will no longer receive these kinds of emails.</p>
                 </div>
-            ) : (
+            ) : unsubscription === false ? (
                 <div>
                     <h2>Something went wrong!</h2>
                     <p>Your may already be unsubscribed or the link you clicked may be invalid.</p>
+                </div>
+            ) : (
+                <div>
+                    <h2>Invalid unsubscribe link</h2>
+                    <p>The link you clicked appears to be invalid or incomplete. Please try clicking the link from your email again.</p>
                 </div>
             )}
         </BridgePage>

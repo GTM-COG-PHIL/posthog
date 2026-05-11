@@ -73,7 +73,7 @@ def send_email_subscription_report(
         f"{subscription.next_delivery_date.isoformat() if subscription.next_delivery_date is not None else 'unscheduled'}"
     )
 
-    unsubscribe_url = absolute_uri(f"/unsubscribe?token={get_unsubscribe_token(subscription, email)}&{utm_tags}")
+    unsubscribe_url = absolute_uri(f"/unsubscribe?{utm_tags}#token={get_unsubscribe_token(subscription, email)}")
 
     if is_invite:
         invite_summary = (
