@@ -433,8 +433,20 @@ class QueryCoalescingMixin(_MixinBase):
             self.response = self.finalize_response(request, response, *args, **kwargs)
             return self.response
 
-        return HttpResponse(
-            coalesced["body"],
-            status=coalesced["status"],
-            content_type=coalesced.get("content_type", "application/json"),
-        )
+        body = coalesced["body"]
+
+        # Validate that the cached body is well-formed JSON — these endpoints
+        # only produce JSON responses. Reject anything else to prevent
+        # reflecting unexpected content from a corrupted cache entry.
+        try:
+            orjson.loads(body if isinstance(body, bytes) else body.encode("utf-8"))
+        except (orjson.JSONDecodeError, UnicodeDecodeError):
+            logger.warning(
+                "query_coalescing_mixin_invalid_json_body",
+                coalescing_path=request.path,
+            )
+            return super().dispatch(request._request, *args, **kwargs)
+
+        response = HttpResponse(body, status=coalesced["status"], content_type="application/json")
+        response["X-Content-Type-Options"] = "nosniff"
+        return response

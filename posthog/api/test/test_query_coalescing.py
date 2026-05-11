@@ -494,3 +494,67 @@ class TestQueryCoalescingMiddleware(ClickhouseTestMixin, APIBaseTest):
         ):
             self.client.post(path, {"query": {"kind": "EventsQuery", "select": ["event"]}})
             mock_cls.assert_called_once()
+
+    def test_follower_rejects_non_json_body(self):
+        _create_event(team=self.team, event="test_event", distinct_id="user1")
+        flush_persons_and_events()
+
+        mock_coalescer = mock.MagicMock()
+        mock_coalescer.try_acquire.return_value = False
+        mock_coalescer._dry_run = False
+        mock_coalescer.wait_for_signal.return_value = CoalesceSignal.DONE
+        mock_coalescer.get_success_response.return_value = {
+            "status": 200,
+            "body": "<script>alert(1)</script>",
+            "content_type": "text/html",
+        }
+
+        with (
+            mock.patch("posthog.api.query_coalescer.posthoganalytics.feature_enabled", return_value=True),
+            mock.patch("posthog.api.query_coalescer.QueryCoalescer", return_value=mock_coalescer),
+        ):
+            response = self.client.post(self._query_url(), self._query_payload())
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("results", data)
+
+    def test_follower_forces_json_content_type(self):
+        mock_coalescer = mock.MagicMock()
+        mock_coalescer.try_acquire.return_value = False
+        mock_coalescer._dry_run = False
+        mock_coalescer.wait_for_signal.return_value = CoalesceSignal.DONE
+        mock_coalescer.get_success_response.return_value = {
+            "status": 200,
+            "body": '{"results": [["test_event"]]}',
+            "content_type": "text/html",
+        }
+
+        with (
+            mock.patch("posthog.api.query_coalescer.posthoganalytics.feature_enabled", return_value=True),
+            mock.patch("posthog.api.query_coalescer.QueryCoalescer", return_value=mock_coalescer),
+        ):
+            response = self.client.post(self._query_url(), self._query_payload())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/json", response["Content-Type"])
+
+    def test_follower_response_has_nosniff_header(self):
+        mock_coalescer = mock.MagicMock()
+        mock_coalescer.try_acquire.return_value = False
+        mock_coalescer._dry_run = False
+        mock_coalescer.wait_for_signal.return_value = CoalesceSignal.DONE
+        mock_coalescer.get_success_response.return_value = {
+            "status": 200,
+            "body": '{"results": [["test_event"]]}',
+            "content_type": "application/json",
+        }
+
+        with (
+            mock.patch("posthog.api.query_coalescer.posthoganalytics.feature_enabled", return_value=True),
+            mock.patch("posthog.api.query_coalescer.QueryCoalescer", return_value=mock_coalescer),
+        ):
+            response = self.client.post(self._query_url(), self._query_payload())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
