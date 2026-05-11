@@ -279,19 +279,6 @@ export const heatmapsBrowserLogic = kea<heatmapsBrowserLogicType>([
             (s) => [s.topUrlsLoading, s.topUrls],
             (topUrlsLoading, topUrls) => !topUrlsLoading && (!topUrls || topUrls.length === 0),
         ],
-        iframeOrigin: [
-            (s) => [s.dataUrl],
-            (dataUrl): string => {
-                if (!dataUrl) {
-                    return '*'
-                }
-                try {
-                    return new URL(dataUrl).origin
-                } catch {
-                    return '*'
-                }
-            },
-        ],
     }),
 
     listeners(({ actions, props, values, cache }) => ({
@@ -321,12 +308,18 @@ export const heatmapsBrowserLogic = kea<heatmapsBrowserLogicType>([
         },
 
         sendToolbarMessage: ({ type, payload }) => {
+            let origin = '*'
+            try {
+                origin = values.dataUrl ? new URL(values.dataUrl).origin : '*'
+            } catch {
+                // invalid URL, fall back to wildcard
+            }
             props.iframeRef?.current?.contentWindow?.postMessage(
                 {
                     type,
                     payload,
                 },
-                values.iframeOrigin
+                origin
             )
         },
 

@@ -209,29 +209,22 @@ export const iframedToolbarBrowserLogic = kea<iframedToolbarBrowserLogicType>([
                 return browserUrl + '/' + currentPath
             },
         ],
-        iframeOrigin: [
-            (s) => [s.browserUrl],
-            (browserUrl): string => {
-                if (!browserUrl) {
-                    return '*'
-                }
-                try {
-                    return new URL(browserUrl).origin
-                } catch {
-                    return '*'
-                }
-            },
-        ],
     }),
 
     listeners(({ actions, props, values, cache }) => ({
         sendToolbarMessage: ({ type, payload }) => {
+            let origin = '*'
+            try {
+                origin = values.browserUrl ? new URL(values.browserUrl).origin : '*'
+            } catch {
+                // invalid URL, fall back to wildcard
+            }
             props.iframeRef?.current?.contentWindow?.postMessage(
                 {
                     type,
                     payload,
                 },
-                values.iframeOrigin
+                origin
             )
         },
         setProposedBrowserUrl: ({ url }) => {
